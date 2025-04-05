@@ -42,52 +42,56 @@ jobs:
       run: |
         dpkg --add-architecture i386
         apt-get update
-        apt-get install -y wget gnupg software-properties-common
+        apt-get install -y wget gnupg software-properties-common ca-certificates
         wget -O- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor > /usr/share/keyrings/winehq.gpg
-        echo "deb [signed-by=/usr/share/keyrings/winehq.gpg] https://dl.winehq.org/wine-builds/debian/ bookworm main" > /etc/apt/sources.list.d/winehq.list
-        dpkg --add-architecture i386
+        echo "deb [signed-by=/usr/share/keyrings/winehq.gpg] https://dl.winehq.org/wine-builds/debian/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/winehq.list
         apt-get update
 
     - name: Install 32-bit Dependencies
       run: |
         apt-get install -y \
           winehq-stable \
+          cabextract \
+          xvfb \
           libgl1-mesa-glx:i386 \
           libfreetype6:i386 \
           libx11-6:i386 \
           libxext6:i386 \
-          unzip wget gnupg software-properties-common
+          unzip wget
 
-    - name: Download and Install winetricks
-      run: |
-        # 下载 winetricks 脚本到 /usr/local/bin
-        wget https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks -O /usr/local/bin/winetricks
-        # 赋予执行权限
-        chmod +x /usr/local/bin/winetricks
-        # 确保它在 PATH 中可以执行
-        export PATH=$PATH:/usr/local/bin
-
-    - name: Configure Wine 32-bit
+    - name: Configure Environment
       run: |
         export WINEPREFIX=/wine32
         export WINEARCH=win32
-        wine wineboot --init
-        winetricks -q vcrun2022
+        export XDG_RUNTIME_DIR=/tmp/runtime
+        mkdir -p $XDG_RUNTIME_DIR
+        chmod 700 $XDG_RUNTIME_DIR
 
-    - name: Download 32-bit Python
+    - name: Download and Install winetricks
+      run: |
+        wget https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks -O /usr/local/bin/winetricks
+        chmod +x /usr/local/bin/winetricks
+
+    - name: Initialize Wine
+      run: |
+        xvfb-run wine wineboot --init
+        xvfb-run winetricks --force -q vcrun2022
+
+    - name: Setup Python Environment
       run: |
         wget https://www.python.org/ftp/python/3.10.0/python-3.10.0-embed-win32.zip
         unzip python-3.10.0-embed-win32.zip -d py32
+        # 修复 Python 嵌入版的 _bz2 问题
+        cp /wine32/drive_c/windows/system32/python310.dll py32/
 
     - name: Install PyInstaller
       run: |
-        export WINEPREFIX=/wine32
-        wine py32/python.exe -m pip install pyinstaller
+        xvfb-run wine py32/python.exe -m pip install --upgrade pip
+        xvfb-run wine py32/python.exe -m pip install pyinstaller
 
     - name: Build 32-bit EXE
       run: |
-        export WINEPREFIX=/wine32
-        wine py32/python.exe -m PyInstaller --onefile ok_school_life.py
+        xvfb-run wine py32/python.exe -m PyInstaller --onefile ok_school_life.py
 
     - uses: actions/upload-artifact@v4
       with:
