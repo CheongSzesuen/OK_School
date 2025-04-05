@@ -1,4 +1,4 @@
-name: Build and Release EXE
+name: Multi-Arch Build
 
 on:
   push:
@@ -6,61 +6,72 @@ on:
       - 'v*'
 
 permissions:
-  contents: write  # 必须的权限
+  contents: write
 
 jobs:
-  build-exe:
-    name: Build EXE
+  build-exe-64:
     runs-on: windows-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
       
-    - name: Set up Python
+    - name: Setup Python 64-bit
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        
-    - name: Build EXE with PyInstaller
-      run: |
-        pyinstaller --onefile --windowed ok_school_life.py
-        ls dist/  # 验证 EXE 文件名
-        
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
+        python-version: "3.10"
+        architecture: x64
+
+    - name: Install PyInstaller
+      run: pip install pyinstaller
+
+    - name: Build 64-bit EXE
+      run: pyinstaller --onefile ok_school_life.py
+
+    - uses: actions/upload-artifact@v4
       with:
-        name: windows-exe
+        name: exe-64
+        path: dist/
+
+  build-exe-32:
+    runs-on: ubuntu-latest
+    container:
+      image: python:3.10-slim
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install 32-bit Dependencies
+      run: |
+        dpkg --add-architecture i386
+        apt-get update
+        apt-get install -y wine-stable python3-pip gcc-multilib
+
+    - name: Download 32-bit Python
+      run: |
+        wget https://www.python.org/ftp/python/3.10.0/python-3.10.0-embed-win32.zip
+        unzip python-3.10.0-embed-win32.zip -d py32
+
+    - name: Install PyInstaller for 32-bit
+      run: wine py32/python.exe -m pip install pyinstaller
+
+    - name: Build 32-bit EXE
+      run: wine py32/python.exe -m PyInstaller --onefile ok_school_life.py
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: exe-32
         path: dist/
 
   create-release:
-    name: Create Release
-    needs: build-exe
+    needs: [build-exe-64, build-exe-32]
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Download artifact
-      uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v4
       with:
-        name: windows-exe
-        path: release-files  # 下载到明确命名的目录
+        path: artifacts
         
-    - name: Verify Files (Debug)
-      run: |
-        echo "=== 下载的文件列表 ==="
-        ls -R release-files
-        echo "===================="
-        
-    - name: Create GitHub Release
-      uses: ncipollo/release-action@v1
+    - uses: ncipollo/release-action@v1
       with:
-        tag: ${{ github.ref_name }}  # 直接使用标签名（如 v1.0.0）
-        name: "Release ${{ github.ref_name }}"
-        body: "Automated EXE release"
-        artifacts: "release-files/*.exe"  # 通配符匹配所有 EXE
+        tag: ${{ github.ref_name }}
+        artifacts: |
+          artifacts/exe-64/*.exe
+          artifacts/exe-32/*.exe
         token: ${{ secrets.GITHUB_TOKEN }}
