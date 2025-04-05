@@ -5,32 +5,7 @@ on:
     tags:
       - 'v*'
 
-permissions:
-  contents: write
-
 jobs:
-  build-exe-64:
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v4
-      
-    - name: Setup Python 64-bit
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.10"
-        architecture: x64
-
-    - name: Install dependencies
-      run: pip install pyinstaller
-
-    - name: Build EXE
-      run: pyinstaller --onefile ok_school_life.py
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: exe-64
-        path: dist/
-
   build-exe-32:
     runs-on: ubuntu-latest
     container:
@@ -38,57 +13,32 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Configure environment
+    - name: Configure Wine
       run: |
-        # 创建隔离环境
-        export WORKSPACE="/tmp/wine_$(date +%s)"
-        mkdir -p "$WORKSPACE"
-        echo "WORKSPACE=$WORKSPACE" >> $GITHUB_ENV
-        echo "WINEPREFIX=$WORKSPACE/wine32" >> $GITHUB_ENV
-        echo "WINEARCH=win32" >> $GITHUB_ENV
-        echo "HOME=$WORKSPACE/home" >> $GITHUB_ENV
+        # 添加 32 位支持
+        sudo dpkg --add-architecture i386
 
-    - name: Install dependencies
-      run: |
-        apt-get update
-        apt-get install -y \
+        # 安装基础依赖
+        sudo apt-get update
+        sudo apt-get install -y \
           wget \
           gnupg \
-          software-properties-common \
-          xvfb \
-          winehq-stable \
-          cabextract
+          ca-certificates
 
-    - name: Initialize Wine
-      run: |
-        mkdir -p "$WINEPREFIX"
-        chmod -R 700 "$WINEPREFIX"
-        
-        xvfb-run -a wine wineboot --init
-        wine reg add "HKEY_CURRENT_USER\\Environment" /v WINEPREFIX /t REG_SZ /d "$WINEPREFIX" /f
+        # 配置 WineHQ 仓库
+        wget -qO- https://dl.winehq.org/wine-builds/winehq.key | \
+          gpg --dearmor | \
+          sudo tee /usr/share/keyrings/winehq-archive-keyring.gpg > /dev/null
+        echo "deb [signed-by=/usr/share/keyrings/winehq-archive-keyring.gpg] https://dl.winehq.org/wine-builds/debian/ bookworm main" | \
+          sudo tee /etc/apt/sources.list.d/winehq.list
+        sudo apt-get update
+
+        # 安装 Wine
+        sudo apt-get install -y \
+          --install-recommends \
+          winehq-stable
 
     - name: Build 32-bit EXE
       run: |
-        # 这里添加具体的构建命令
-        xvfb-run -a wine python ok_school_life.py
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: exe-32
-        path: dist/
-
-  create-release:
-    needs: [build-exe-64, build-exe-32]
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/download-artifact@v4
-      with:
-        path: artifacts
-        
-    - uses: ncipollo/release-action@v1
-      with:
-        tag: ${{ github.ref_name }}
-        artifacts: |
-          artifacts/exe-64/*.exe
-          artifacts/exe-32/*.exe
-        token: ${{ secrets.GITHUB_TOKEN }}
+        # 此处添加具体构建命令
+        wine python -m Py
