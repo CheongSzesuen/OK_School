@@ -38,22 +38,43 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install 32-bit Dependencies
+    - name: Add WineHQ Repository
       run: |
         dpkg --add-architecture i386
         apt-get update
-        apt-get install -y wine-stable python3-pip gcc-multilib
+        apt-get install -y wget gnupg software-properties-common
+        wget -O- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor > /usr/share/keyrings/winehq.gpg
+        echo "deb [signed-by=/usr/share/keyrings/winehq.gpg] https://dl.winehq.org/wine-builds/debian/ bookworm main" > /etc/apt/sources.list.d/winehq.list
+
+    - name: Install 32-bit Dependencies
+      run: |
+        apt-get update
+        apt-get install -y \
+          winehq-stable \
+          winetricks \
+          libgl1-mesa-glx:i386 \
+          libfreetype6:i386
+
+    - name: Configure Wine 32-bit
+      run: |
+        export WINEPREFIX=/wine32
+        export WINEARCH=win32
+        wine wineboot --init
 
     - name: Download 32-bit Python
       run: |
         wget https://www.python.org/ftp/python/3.10.0/python-3.10.0-embed-win32.zip
         unzip python-3.10.0-embed-win32.zip -d py32
 
-    - name: Install PyInstaller for 32-bit
-      run: wine py32/python.exe -m pip install pyinstaller
+    - name: Install PyInstaller
+      run: |
+        export WINEPREFIX=/wine32
+        wine py32/python.exe -m pip install pyinstaller
 
     - name: Build 32-bit EXE
-      run: wine py32/python.exe -m PyInstaller --onefile ok_school_life.py
+      run: |
+        export WINEPREFIX=/wine32
+        wine py32/python.exe -m PyInstaller --onefile ok_school_life.py
 
     - uses: actions/upload-artifact@v4
       with:
