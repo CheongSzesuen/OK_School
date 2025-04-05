@@ -1,44 +1,66 @@
-name: Multi-Arch Build
+name: Build and Release EXE
 
 on:
   push:
     tags:
       - 'v*'
 
+permissions:
+  contents: write  # 必须的权限
+
 jobs:
-  build-exe-32:
-    runs-on: ubuntu-latest
-    container:
-      image: python:3.10-slim
+  build-exe:
+    name: Build EXE
+    runs-on: windows-latest
+    
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Configure Wine
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
       run: |
-        # 添加 32 位支持
-        sudo dpkg --add-architecture i386
-
-        # 安装基础依赖
-        sudo apt-get update
-        sudo apt-get install -y \
-          wget \
-          gnupg \
-          ca-certificates
-
-        # 配置 WineHQ 仓库
-        wget -qO- https://dl.winehq.org/wine-builds/winehq.key | \
-          gpg --dearmor | \
-          sudo tee /usr/share/keyrings/winehq-archive-keyring.gpg > /dev/null
-        echo "deb [signed-by=/usr/share/keyrings/winehq-archive-keyring.gpg] https://dl.winehq.org/wine-builds/debian/ bookworm main" | \
-          sudo tee /etc/apt/sources.list.d/winehq.list
-        sudo apt-get update
-
-        # 安装 Wine
-        sudo apt-get install -y \
-          --install-recommends \
-          winehq-stable
-
-    - name: Build 32-bit EXE
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        
+    - name: Build EXE with PyInstaller
       run: |
-        # 此处添加具体构建命令
-        wine python -m Py
+        pyinstaller --onefile --windowed ok_school_life.py
+        ls dist/  # 验证 EXE 文件名
+        
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-exe
+        path: dist/
+
+  create-release:
+    name: Create Release
+    needs: build-exe
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: windows-exe
+        path: release-files  # 下载到明确命名的目录
+        
+    - name: Verify Files (Debug)
+      run: |
+        echo "=== 下载的文件列表 ==="
+        ls -R release-files
+        echo "===================="
+        
+    - name: Create GitHub Release
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ github.ref_name }}  # 直接使用标签名（如 v1.0.0）
+        name: "Release ${{ github.ref_name }}"
+        body: "Automated EXE release"
+        artifacts: "release-files/*.exe"  # 通配符匹配所有 EXE
+        token: ${{ secrets.GITHUB_TOKEN }}
