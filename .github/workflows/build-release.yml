@@ -45,21 +45,25 @@ jobs:
         apt-get install -y wget gnupg software-properties-common
         wget -O- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor > /usr/share/keyrings/winehq.gpg
         echo "deb [signed-by=/usr/share/keyrings/winehq.gpg] https://dl.winehq.org/wine-builds/debian/ bookworm main" > /etc/apt/sources.list.d/winehq.list
+        dpkg --add-architecture i386
+        apt-get update
 
     - name: Install 32-bit Dependencies
       run: |
-        apt-get update
         apt-get install -y \
           winehq-stable \
           winetricks \
           libgl1-mesa-glx:i386 \
-          libfreetype6:i386
+          libfreetype6:i386 \
+          libx11-6:i386 \
+          libxext6:i386
 
     - name: Configure Wine 32-bit
       run: |
         export WINEPREFIX=/wine32
         export WINEARCH=win32
         wine wineboot --init
+        winetricks -q vcrun2022
 
     - name: Download 32-bit Python
       run: |
