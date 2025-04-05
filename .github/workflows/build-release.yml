@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*' # 推送以v开头的标签时触发，如v1.0.0
+      - 'v*'
 
 jobs:
   build-exe:
@@ -12,7 +12,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4  # 更新到最新版本
       
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -28,10 +28,10 @@ jobs:
     - name: Build EXE with PyInstaller
       run: |
         pyinstaller --onefile --windowed your_script.py
-        # 如果有其他资源文件需要包含，添加 --add-data 参数
+        ls dist/  # 检查是否生成 EXE
         
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # 改用 v4
       with:
         name: windows-exe
         path: dist/
@@ -42,7 +42,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -64,14 +64,13 @@ jobs:
     - name: Initialize Buildozer
       run: |
         buildozer init
-        # 根据需要修改生成的 buildozer.spec 文件
         
     - name: Build APK
       run: |
         buildozer -v android debug
         
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # 改用 v4
       with:
         name: android-apk
         path: bin/
@@ -83,7 +82,7 @@ jobs:
     
     steps:
     - name: Download artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4  # 改用 v4
       with:
         path: artifacts
         
@@ -97,8 +96,6 @@ jobs:
           Automated release for ${{ github.ref }}
           - EXE application for Windows
           - APK application for Android
-        draft: false
-        prerelease: false
         files: |
-          artifacts/windows-exe/your_script.exe
+          artifacts/windows-exe/your_script.exe  # 确保文件名正确
           artifacts/android-apk/your_app-0.1-debug.apk
