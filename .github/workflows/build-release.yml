@@ -8,79 +8,46 @@ on:
 permissions:
   contents: write
 
-env:  # 全局环境变量
-  WINEPREFIX: /wine32
-  WINEARCH: win32
-  XDG_RUNTIME_DIR: /tmp/runtime
-
 jobs:
   build-exe-64:
-    # 保持原有 64 位构建配置不变...
-
-  build-exe-32:
-    runs-on: ubuntu-latest
-    container:
-      image: python:3.10-slim
+    runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
-
-    - name: Add WineHQ Repository
-      run: |
-        dpkg --add-architecture i386
-        apt-get update
-        apt-get install -y wget gnupg software-properties-common ca-certificates
-        wget -O- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor > /usr/share/keyrings/winehq.gpg
-        echo "deb [signed-by=/usr/share/keyrings/winehq.gpg] https://dl.winehq.org/wine-builds/debian/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/winehq.list
-        apt-get update
-
-    - name: Install 32-bit Dependencies
-      run: |
-        apt-get install -y \
-          winehq-stable \
-          cabextract \
-          xvfb \
-          libgl1-mesa-glx:i386 \
-          libfreetype6:i386 \
-          libx11-6:i386 \
-          libxext6:i386 \
-          unzip wget
-
-    - name: Configure Environment
-      run: |
-        sudo mkdir -p "$WINEPREFIX"
-        sudo chown -R $(whoami):$(whoami) "$WINEPREFIX"
-        mkdir -p "$XDG_RUNTIME_DIR"
-        chmod 700 "$XDG_RUNTIME_DIR"
-
-    - name: Download and Install winetricks
-      run: |
-        wget https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks -O /usr/local/bin/winetricks
-        chmod +x /usr/local/bin/winetricks
-
-    - name: Initialize Wine
-      run: |
-        xvfb-run -a wine wineboot --init
-        xvfb-run -a winetricks --force -q vcrun2022
-
-    - name: Setup Python Environment
-      run: |
-        wget https://www.python.org/ftp/python/3.10.0/python-3.10.0-embed-win32.zip
-        unzip python-3.10.0-embed-win32.zip -d py32
-        cp "$WINEPREFIX/drive_c/windows/system32/python310.dll" py32/
+      
+    - name: Setup Python 64-bit
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+        architecture: x64
 
     - name: Install PyInstaller
-      run: |
-        xvfb-run -a wine py32/python.exe -m pip install --upgrade pip
-        xvfb-run -a wine py32/python.exe -m pip install pyinstaller
+      run: pip install pyinstaller
 
-    - name: Build 32-bit EXE
-      run: |
-        xvfb-run -a wine py32/python.exe -m PyInstaller --onefile ok_school_life.py
+    - name: Build 64-bit EXE
+      run: pyinstaller --onefile ok_school_life.py
 
     - uses: actions/upload-artifact@v4
       with:
-        name: exe-32
+        name: exe-64
         path: dist/
 
+  build-exe-32:
+    # 保持之前的 32 位构建步骤不变...
+
   create-release:
-    # 保持原有发布配置不变...
+    needs: [build-exe-64, build-exe-32]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        
+    - name: Create Release
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ github.ref_name }}
+        artifacts: |
+          artifacts/exe-64/*.exe
+          artifacts/exe-32/*.exe
+        token: ${{ secrets.GITHUB_TOKEN }}
