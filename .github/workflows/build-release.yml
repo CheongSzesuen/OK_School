@@ -5,37 +5,116 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
+  build-exe-64:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Python 64-bit
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+        architecture: x64
+
+    - name: Install dependencies
+      run: pip install pyinstaller
+
+    - name: Build 64-bit EXE
+      run: pyinstaller --onefile ok_school_life.py
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: exe-64
+        path: dist/
+
   build-exe-32:
     runs-on: ubuntu-latest
     container:
       image: python:3.10-slim
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-    - name: Configure isolated environment
+    - name: Install system dependencies
       run: |
-        # 创建隔离环境
-        export WORKSPACE="/tmp/build_$(date +%s)"
-        export WINEPREFIX="$WORKSPACE/wine32"
+        dpkg --add-architecture i386
+        apt-get update
+        apt-get install -y \
+          wget \
+          gnupg \
+          software-properties-common \
+          ca-certificates \
+          xvfb  # 新增 xvfb 安装
+
+        # 添加 Wine 源
+        wget -O- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor > /usr/share/keyrings/winehq.gpg
+        echo "deb [signed-by=/usr/share/keyrings/winehq.gpg] https://dl.winehq.org/wine-builds/debian/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/winehq.list
+        apt-get update
+
+    - name: Install Wine dependencies
+      run: |
+        apt-get install -y \
+          winehq-stable \
+          cabextract \
+          libgl1-mesa-glx:i386 \
+          libfreetype6:i386 \
+          libx11-6:i386 \
+          libxext6:i386 \
+          unzip
+
+    - name: Configure Wine environment
+      run: |
+        export WINEPREFIX=$HOME/wine32
         export WINEARCH=win32
-        export HOME="$WORKSPACE/home"
-        export XDG_RUNTIME_DIR="$WORKSPACE/runtime"
-        
-        mkdir -p "$WORKSPACE"
-        chmod -R 700 "$WORKSPACE"
-        echo "WORKSPACE=$WORKSPACE" >> $GITHUB_ENV
+        mkdir -p $WINEPREFIX
+        chmod 700 $WINEPREFIX
 
     - name: Initialize Wine
-      env:
-        WINEPREFIX: ${{ env.WORKSPACE }}/wine32
-        WINEARCH: win32
       run: |
-        # 初始化wine配置
         xvfb-run -a wine wineboot --init
-        # 写入注册表永久配置
-        wine reg add "HKEY_CURRENT_USER\\Environment" /v WINEPREFIX /t REG_SZ /d "$WINEPREFIX" /f
-        # 验证配置
-        wine reg query "HKEY_CURRENT_USER\\Environment" /v WINEPREFIX
+        xvfb-run -a winetricks --force -q vcrun2022
 
-    # ...后续步骤保持WINEPREFIX环境变量一致...
+    - name: Setup Python 32-bit
+      run: |
+        wget https://www.python.org/ftp/python/3.10.0/python-3.10.0-embed-win32.zip
+        unzip python-3.10.0-embed-win32.zip -d py32
+        cp $HOME/wine32/drive_c/windows/system32/python310.dll py32/
+
+    - name: Install PyInstaller
+      run: |
+        xvfb-run -a wine py32/python.exe -m pip install --upgrade pip
+        xvfb-run -a wine py32/python.exe -m pip install pyinstaller
+
+    - name: Build 32-bit EXE
+      run: |
+        xvfb-run -a wine py32/python.exe -m PyInstaller --onefile ok_school_life.py
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: exe-32
+        path: dist/
+
+  create-release:
+    needs: [build-exe-64, build-exe-32]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create release
+      uses: ncipollo/release-action@v1
+      with:
+        tag: ${{ github.ref_name }}
+        artifacts: |
+          artifacts/exe-64/*.exe
+          artifacts/exe-32/*.exe
+        token: ${{ secrets.GITHUB_TOKEN }}
