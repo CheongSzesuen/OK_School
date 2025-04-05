@@ -64,11 +64,11 @@ jobs:
 
     - name: Configure environment
       run: |
-        sudo mkdir -p /wine32
-        sudo chown -R $(whoami):$(whoami) /wine32
-        export WINEPREFIX=/wine32
+        export WINEPREFIX=$HOME/wine32
         export WINEARCH=win32
-        export XDG_RUNTIME_DIR=/tmp/runtime
+        export XDG_RUNTIME_DIR=$HOME/runtime
+        mkdir -p $WINEPREFIX
+        chmod 700 $WINEPREFIX
         mkdir -p $XDG_RUNTIME_DIR
         chmod 700 $XDG_RUNTIME_DIR
 
@@ -81,7 +81,7 @@ jobs:
       run: |
         wget https://www.python.org/ftp/python/3.10.0/python-3.10.0-embed-win32.zip
         unzip python-3.10.0-embed-win32.zip -d py32
-        cp /wine32/drive_c/windows/system32/python310.dll py32/
+        cp $HOME/wine32/drive_c/windows/system32/python310.dll py32/
 
     - name: Install PyInstaller
       run: |
