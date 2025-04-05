@@ -12,7 +12,8 @@ jobs:
   build-exe-64:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
       
     - name: Setup Python 64-bit
       uses: actions/setup-python@v4
@@ -20,30 +21,93 @@ jobs:
         python-version: "3.10"
         architecture: x64
 
-    - name: Install PyInstaller
+    - name: Install dependencies
       run: pip install pyinstaller
 
-    - name: Build 64-bit EXE
+    - name: Build EXE
       run: pyinstaller --onefile ok_school_life.py
 
-    - uses: actions/upload-artifact@v4
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
       with:
         name: exe-64
         path: dist/
 
   build-exe-32:
-    # 保持之前的 32 位构建步骤不变...
+    runs-on: ubuntu-latest
+    container:
+      image: python:3.10-slim
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Add WineHQ repo
+      run: |
+        dpkg --add-architecture i386
+        apt-get update
+        apt-get install -y wget gnupg software-properties-common ca-certificates
+        wget -O- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor > /usr/share/keyrings/winehq.gpg
+        echo "deb [signed-by=/usr/share/keyrings/winehq.gpg] https://dl.winehq.org/wine-builds/debian/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/winehq.list
+        apt-get update
+
+    - name: Install dependencies
+      run: |
+        apt-get install -y \
+          winehq-stable \
+          cabextract \
+          xvfb \
+          libgl1-mesa-glx:i386 \
+          libfreetype6:i386 \
+          libx11-6:i386 \
+          libxext6:i386 \
+          unzip wget
+
+    - name: Configure environment
+      run: |
+        sudo mkdir -p /wine32
+        sudo chown -R $(whoami):$(whoami) /wine32
+        export WINEPREFIX=/wine32
+        export WINEARCH=win32
+        export XDG_RUNTIME_DIR=/tmp/runtime
+        mkdir -p $XDG_RUNTIME_DIR
+        chmod 700 $XDG_RUNTIME_DIR
+
+    - name: Initialize Wine
+      run: |
+        xvfb-run -a wine wineboot --init
+        xvfb-run -a winetricks --force -q vcrun2022
+
+    - name: Setup Python
+      run: |
+        wget https://www.python.org/ftp/python/3.10.0/python-3.10.0-embed-win32.zip
+        unzip python-3.10.0-embed-win32.zip -d py32
+        cp /wine32/drive_c/windows/system32/python310.dll py32/
+
+    - name: Install PyInstaller
+      run: |
+        xvfb-run -a wine py32/python.exe -m pip install --upgrade pip
+        xvfb-run -a wine py32/python.exe -m pip install pyinstaller
+
+    - name: Build EXE
+      run: |
+        xvfb-run -a wine py32/python.exe -m PyInstaller --onefile ok_school_life.py
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: exe-32
+        path: dist/
 
   create-release:
     needs: [build-exe-64, build-exe-32]
     runs-on: ubuntu-latest
     steps:
-    - name: Download Artifacts
+    - name: Download artifacts
       uses: actions/download-artifact@v4
       with:
         path: artifacts
         
-    - name: Create Release
+    - name: Create release
       uses: ncipollo/release-action@v1
       with:
         tag: ${{ github.ref_name }}
