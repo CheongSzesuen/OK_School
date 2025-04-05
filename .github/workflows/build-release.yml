@@ -5,58 +5,46 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write  # 关键权限！
+
 jobs:
   build-exe:
-    name: Build EXE
     runs-on: windows-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
       
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
         
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        # 如果不需要 requirements.txt，可以删除下一行
-        pip install -r requirements.txt
+    - name: Install PyInstaller
+      run: pip install pyinstaller
         
-    - name: Build EXE with PyInstaller
-      run: |
-        pyinstaller --onefile --windowed ok_school_life.py
-        ls dist/  # 检查是否生成 EXE
+    - name: Build EXE
+      run: pyinstaller --onefile --windowed ok_school_life.py
         
-    - name: Upload artifact
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: windows-exe
         path: dist/
-        
+
   create-release:
-    name: Create Release
-    needs: build-exe  # 仅依赖 EXE 构建任务
+    needs: build-exe
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Download artifact
-      uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v4
       with:
-        name: windows-exe  # 仅下载 EXE 的 Artifact
-        path: artifacts/windows-exe
+        name: windows-exe
+        path: release-files
         
-    - name: Create Release
-      id: create_release
-      uses: softprops/action-gh-release@v1
+    - name: List Files (Debug)
+      run: ls -R release-files  # 调试步骤
+        
+    - uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ github.ref }}
-        name: Release ${{ github.ref }}
-        body: |
-          Automated release for ${{ github.ref }}
-          - EXE application for Windows
         files: |
-          artifacts/windows-exe/ok_school_life.exe  # 确保文件名匹配
+          release-files/*.exe  # 使用通配符
