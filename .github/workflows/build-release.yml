@@ -52,12 +52,20 @@ jobs:
       run: |
         apt-get install -y \
           winehq-stable \
-          winetricks \
           libgl1-mesa-glx:i386 \
           libfreetype6:i386 \
           libx11-6:i386 \
           libxext6:i386 \
-          unzip
+          unzip wget gnupg software-properties-common
+
+    - name: Download and Install winetricks
+      run: |
+        # 下载 winetricks 脚本到 /usr/local/bin
+        wget https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks -O /usr/local/bin/winetricks
+        # 赋予执行权限
+        chmod +x /usr/local/bin/winetricks
+        # 确保它在 PATH 中可以执行
+        export PATH=$PATH:/usr/local/bin
 
     - name: Configure Wine 32-bit
       run: |
