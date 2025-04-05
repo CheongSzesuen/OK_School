@@ -56,7 +56,8 @@ jobs:
           libgl1-mesa-glx:i386 \
           libfreetype6:i386 \
           libx11-6:i386 \
-          libxext6:i386
+          libxext6:i386 \
+          unzip
 
     - name: Configure Wine 32-bit
       run: |
